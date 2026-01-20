@@ -1,141 +1,106 @@
 import streamlit as st
-import json
-import os
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Mi Tienda de Dulces", page_icon="🍬")
+# --- CONFIGURACIÓN ---
+st.set_page_config(page_title="Dulces App", page_icon="🍬")
+st.title("🍬 Gestión de Dulces (En la Nube)")
 
-ARCHIVO_DATOS = "mis_dulces_web.json"
+# --- CONEXIÓN A GOOGLE SHEETS ---
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- FUNCIONES DE DATOS ---
+# Función para cargar datos
 def cargar_datos():
-    if os.path.exists(ARCHIVO_DATOS):
-        try:
-            with open(ARCHIVO_DATOS, "r", encoding='utf-8') as f:
-                return json.load(f)
-        except:
-            return {"bodega": {}, "mochila": {}}
-    return {"bodega": {}, "mochila": {}}
+    try:
+        # Leemos la hoja 1
+        df = conn.read(worksheet="Hoja 1", usecols=[0, 1, 2, 3], ttl=5)
+        df = df.dropna(how="all")
+        return df
+    except Exception as e:
+        return None
 
-def guardar_datos(datos):
-    with open(ARCHIVO_DATOS, "w", encoding='utf-8') as f:
-        json.dump(datos, f, indent=4, ensure_ascii=False)
+# Función para guardar datos
+def guardar_datos(df):
+    conn.update(worksheet="Hoja 1", data=df)
+    st.cache_data.clear()
 
-# Cargar datos al inicio
-datos = cargar_datos()
+# --- CARGAMOS LOS DATOS ---
+df = cargar_datos()
 
-# --- INTERFAZ GRÁFICA (LO QUE SE VE EN LA WEB) ---
-st.title("🍬 Gestión de Dulces Escolar")
+if df is None:
+    st.error("⚠️ Error de conexión: No se ha configurado el enlace al Excel en los 'Secrets' o la hoja no es pública.")
+    st.stop()
 
-# Creamos pestañas para organizar la web
-tab1, tab2, tab3 = st.tabs(["🏠 Bodega (Casa)", "🎒 Mochila (Colegio)", "➕ Agregar Nuevo"])
+if df.empty:
+    df = pd.DataFrame(columns=["Dulce", "Precio", "CantidadBodega", "CantidadMochila"])
 
-# --- PESTAÑA 1: LA BODEGA ---
+# --- PESTAÑAS ---
+tab1, tab2, tab3 = st.tabs(["🏠 Bodega", "🎒 Mochila", "➕ Comprar"])
+
+# --- PESTAÑA 1: BODEGA ---
 with tab1:
     st.header("Inventario en Casa")
-    
-    if not datos["bodega"]:
-        st.info("Tu bodega está vacía. Ve a la pestaña 'Agregar Nuevo'.")
+    if not df.empty:
+        st.dataframe(df[["Dulce", "CantidadBodega", "Precio"]], use_container_width=True)
     else:
-        # Convertimos los datos a una tabla bonita
-        lista_bodega = []
-        for nombre, info in datos["bodega"].items():
-            lista_bodega.append({
-                "Dulce": nombre,
-                "Cantidad": info["cantidad"],
-                "Precio": f"${info['precio']}"
-            })
-        st.dataframe(pd.DataFrame(lista_bodega), use_container_width=True)
+        st.info("No hay dulces todavía.")
 
-# --- PESTAÑA 2: LA MOCHILA ---
+# --- PESTAÑA 2: MOCHILA ---
 with tab2:
-    st.header("¿Qué llevas hoy?")
-    
-    # SECCIÓN 1: VER LO QUE YA TIENES EN LA MOCHILA
-    st.subheader("🎒 En tu mochila ahora:")
-    if datos["mochila"]:
-        total_esperado = 0
-        lista_mochila = []
-        for nombre, info in datos["mochila"].items():
-            subtotal = info['cantidad'] * info['precio']
-            total_esperado += subtotal
-            lista_mochila.append({
-                "Dulce": nombre,
-                "Llevas": info["cantidad"],
-                "Venta Esperada": f"${subtotal}"
-            })
-        st.table(pd.DataFrame(lista_mochila))
-        st.success(f"💰 Ganancia total posible hoy: ${total_esperado}")
+    st.header("Gestión del Día")
+    # Mostrar Mochila
+    mochila = df[df["CantidadMochila"] > 0]
+    if not mochila.empty:
+        st.dataframe(mochila[["Dulce", "CantidadMochila", "Precio"]], use_container_width=True)
+        total = (mochila["CantidadMochila"] * mochila["Precio"]).sum()
+        st.success(f"💰 Venta esperada: ${total:,.0f}")
         
-        if st.button("🔄 Vaciar Mochila (Fin del día)"):
-            datos["mochila"] = {}
-            guardar_datos(datos)
+        if st.button("Vaciar Mochila (Fin del día)"):
+            df["CantidadMochila"] = 0
+            guardar_datos(df)
             st.rerun()
     else:
-        st.warning("La mochila está vacía.")
-
+        st.info("Mochila vacía.")
+    
     st.divider()
-
-    # SECCIÓN 2: MOVER DE BODEGA A MOCHILA
-    st.subheader("move de Bodega ➡️ Mochila")
     
-    opciones_dulces = list(datos["bodega"].keys())
-    
-    if opciones_dulces:
-        col1, col2 = st.columns(2)
-        with col1:
-            dulce_seleccionado = st.selectbox("Elige el dulce", opciones_dulces)
+    # Mover a Mochila
+    st.subheader("Sacar de Bodega")
+    lista = df["Dulce"].unique().tolist()
+    if lista:
+        dulce = st.selectbox("Elige dulce:", lista)
+        idx = df[df["Dulce"] == dulce].index[0]
+        stock = df.at[idx, "CantidadBodega"]
         
-        stock_actual = datos["bodega"][dulce_seleccionado]["cantidad"]
-        precio_actual = datos["bodega"][dulce_seleccionado]["precio"]
+        cant = st.number_input("Cantidad a llevar:", min_value=1, max_value=int(stock) if stock > 0 else 1)
         
-        with col2:
-            cantidad_mover = st.number_input(f"Cantidad (Max: {stock_actual})", 
-                                           min_value=1, max_value=stock_actual if stock_actual > 0 else 1)
-
-        if st.button("Meter a la mochila"):
-            if stock_actual >= cantidad_mover:
-                # Restar de bodega
-                datos["bodega"][dulce_seleccionado]["cantidad"] -= cantidad_mover
-                
-                # Sumar a mochila
-                if dulce_seleccionado in datos["mochila"]:
-                    datos["mochila"][dulce_seleccionado]["cantidad"] += cantidad_mover
-                else:
-                    datos["mochila"][dulce_seleccionado] = {
-                        "cantidad": cantidad_mover, 
-                        "precio": precio_actual
-                    }
-                
-                guardar_datos(datos)
-                st.toast(f"¡Agregaste {cantidad_mover} {dulce_seleccionado}!", icon="✅")
-                st.rerun() # Recarga la página para ver cambios
-            else:
-                st.error("No tienes suficientes dulces en casa.")
-    else:
-        st.write("No hay dulces en bodega para mover.")
-
-# --- PESTAÑA 3: AGREGAR ---
-with tab3:
-    st.header("Comprar / Agregar Stock")
-    
-    with st.form("nuevo_dulce"):
-        nuevo_nombre = st.text_input("Nombre del dulce").strip().capitalize()
-        nueva_cantidad = st.number_input("Cantidad comprada", min_value=1)
-        nuevo_precio = st.number_input("Precio de venta", min_value=50.0)
-        
-        enviado = st.form_submit_button("Guardar en Bodega")
-        
-        if enviado:
-            if nuevo_nombre:
-                datos["bodega"][nuevo_nombre] = {
-                    "cantidad": nueva_cantidad,
-                    "precio": nuevo_precio
-                }
-                guardar_datos(datos)
-                st.success(f"{nuevo_nombre} guardado correctamente.")
-                time.sleep(1)
+        if st.button("Meter en mochila"):
+            if stock >= cant:
+                df.at[idx, "CantidadBodega"] -= cant
+                df.at[idx, "CantidadMochila"] += cant
+                guardar_datos(df)
+                st.toast("¡Listo!", icon="✅")
                 st.rerun()
             else:
-                st.error("Escribe un nombre.")
+                st.error("No hay suficientes.")
+
+# --- PESTAÑA 3: NUEVO ---
+with tab3:
+    st.header("Registrar Compra")
+    with st.form("nuevo"):
+        nom = st.text_input("Nombre").strip().capitalize()
+        pre = st.number_input("Precio", min_value=0.0)
+        can = st.number_input("Cantidad", min_value=1)
+        if st.form_submit_button("Guardar"):
+            if nom:
+                if nom in df["Dulce"].values:
+                    idx = df[df["Dulce"] == nom].index[0]
+                    df.at[idx, "CantidadBodega"] += can
+                    df.at[idx, "Precio"] = pre
+                else:
+                    nuevo = pd.DataFrame([{"Dulce": nom, "Precio": pre, "CantidadBodega": can, "CantidadMochila": 0}])
+                    df = pd.concat([df, nuevo], ignore_index=True)
+                guardar_datos(df)
+                st.success("Guardado.")
+                st.rerun()
+

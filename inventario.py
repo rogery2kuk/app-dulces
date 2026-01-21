@@ -1,50 +1,74 @@
 import streamlit as st
 import pandas as pd
-from streamlit_gsheets import GSheetsConnection
+import gspread
+from google.oauth2.service_account import Credentials
 
-# 1. Configuración
-st.set_page_config(page_title="Dulces App", page_icon="🍬")
-st.title("🍬 Gestión de Dulces (En la Nube)")
+# --- CONFIGURACIÓN DE LA PÁGINA ---
+st.set_page_config(page_title="Inventario Dulces", layout="wide")
 
-# URL DEL EXCEL
-url_excel = "https://docs.google.com/spreadsheets/d/1wVjGQBeoDL4biUwbjqRhkVW6H4zkbQu_0qDokP5s-uY/edit?usp=sharing"
+# --- CREDENCIALES INTEGRADAS (NO TOCAR) ---
+# Esto reemplaza a los Secrets para que funcione YA.
+def obtener_conexion():
+    scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+    
+    credenciales_dict = {
+        "type": "service_account",
+        "project_id": "dulcesapp-485002",
+        "private_key_id": "716d336781b7b019d9224341cc49492a183dd456",
+        "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDVcZYOgZvOLgbX\nOBVdatmDToEwEOubhV/qDuC8O8quY+zDVlAzGzGoO7fCqpz0GsYWDHDfDlJNqgeZ\nISEP7C9yLOYhNGjd/DBpRseZNTt3E8iyzien0HHapEMm1rj4OwOfr3qt3ossIMAs\n6NN22NbkCx1LmMet8pXaPRtqgqlVcj95XSGRlOud6Fd7C2YjznJ8tVcTP/Env/J1\nShsD/t2KSlLZlbCoklhX5IcMQ3wSkoDnsJj323caC7cSZnSGEXFDWUGYIKnWH/rU\nb5kbAD1utO29T8bg0FHJBYRxd9JwKnixVC/dLPLPbqy9gYxfohbmuwbjNzPML2JE\ndeGXXmmrAgMBAAECggEAVbQtJ5f9QrWSg5p+YatEuYetMeqpYCIW2DmvHYX4pTt0\nVx7yRwMVVlLcP2sYaJ/TiAjozXfHrm2mbWMzDlys1HCY2x5bOT9JBQypmqgYP4EP\nJlTG8YguHzezywWO8gVoOBdS8DuasFZaM+4s8tywtJKN6cvn6b2tVBsTRho++hKQ\nd9gdR2A1BplwmanPQFoYlOvICgy4tMZVXJ2nRdI0WvOIxOpAbaeiG5JihQ2bkrXn\nBqGQ22njQQKcbwTpTjL74IcSZAg//ogj1yPZ/ePzpGgFeteREa4JRjcRxvCCWaGR\nwmw9u8NGU9KebZbgEYO3eURGe6wz5F5HeRo0E9a8iQKBgQD9ltb+r6AOmda+fXXQ\nDFc/+XDwly78bPYuUNz3kEEj3QALQFpAgnAzNMPX5uIZ7nsee8tK9q3u5UrbAvig\nTjJKX5596ND+MsIxFm7mFviG1ll/o/I8dpeZWbEZCsQQLOYN0alwQKGcJTNKHmxh\nKREAH6s7JUEAP2NptvC6kFtkHwKBgQDXeQtOPyEdCid0hKhc28n038ebLzcN6U72\n8aT9XHnjYW4VH7JJCEvNzemrdub51MWe6CPD6+KWqc4z151MxSmfCenhGiabadn0\n03nfpFVeeQkK0rzPirGOVo7leMFOumuPcUK2bY562m+posvDL0rF4xJnzcX0CcPF\ngTeMUWVo9QKBgQDeJXxzoeBhygxf1UIWnij0pwx0BsynXsCONFJOILWfuCMouBgX\n+OxXPzrs8JpTQyHhw2qEYfJem8jmcQTiUX4mvvr1q7Uhac/J9q/xql/OpwnCEhnL\nM8x8DyFgIZk93kcuBeQbrNKmGcSDgoFI4BO/ev6iknENyXnKCvN5S6pz2wKBgCcE\nMQrjHYDfpNNRbhcaaVBg8QjlnMd1FqpaiTCjfSKyMre6fJMC4I8MmSJGLn7Qi1RB\n3rAMV4RGjSMQCNis3uOAbQwoqxL7MM9HN8tKO3cW3Y9LJ4tBJvOKMufUXNR/pxhb\nPuQ/pEwUn6GM6+6U8qowetW3CgAtgHiT9FYBKya9AoGASpnMzPXwGAtPJMWRvfB8\nJEKZryzuVe6N6vggeBmD6LqGVGI30cbynczwoXi8p4u1nN9+vAw7Up69mDX1Ysq6\n66LjKKfR90/G2h1esrd5LCHMXuc9u8rH8gzyYaWlujGI74lEqg/uE8/l+LWnRl3K\nZ3budWsV2n2j6OH0t6mnDu4=\n-----END PRIVATE KEY-----\n",
+        "client_email": "robot-dulces@dulcesapp-485002.iam.gserviceaccount.com",
+        "client_id": "111559915828770374333",
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/robot-dulces%40dulcesapp-485002.iam.gserviceaccount.com",
+        "universe_domain": "googleapis.com"
+    }
 
-# 2. Conexión
+    creds = Credentials.from_service_account_info(credenciales_dict, scopes=scope)
+    client = gspread.authorize(creds)
+    return client
+
+# --- LÓGICA DE LA APP ---
 try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
+    st.title("🍬 Gestión de Inventario - Proyecto Final")
     
-    # --- EL CAMBIO MAGICO ESTA AQUI ---
-    # Cambiamos worksheet="Hoja 1" por worksheet=0
-    # El 0 significa "La primera hoja", sin importar cómo se llame.
-    df = conn.read(spreadsheet=url_excel, worksheet=0, usecols=[0, 1, 2, 3], ttl=0)
+    with st.spinner('Conectando a la base de datos...'):
+        # 1. Conectar
+        client = obtener_conexion()
+        
+        # 2. Abrir la hoja por URL
+        url_sheet = "https://docs.google.com/spreadsheets/d/1wVjGQBeoDL4biUwbjqRhkVW6H4zkbQu_0qDokP5s-uY/edit"
+        sh = client.open_by_url(url_sheet)
+        
+        # 3. Seleccionar la primera pestaña
+        worksheet = sh.sheet1
+        
+        # 4. Leer datos y convertir a DataFrame
+        datos = worksheet.get_all_records()
+        df = pd.DataFrame(datos)
+
+    st.success("✅ ¡Conexión Exitosa!")
     
-    # Limpieza básica
-    df = df.dropna(how="all")
+    # MOSTRAR DATOS
+    st.subheader("Inventario Actual")
+    st.dataframe(df)
 
-    st.success("✅ ¡Conectado sin errores de espacio!")
-
-    # 3. Tabla Editable
-    df_editado = st.data_editor(
-        df,
-        num_rows="dynamic",
-        column_config={
-            "Precio": st.column_config.NumberColumn(format="$%d"),
-            "CantidadBodega": st.column_config.NumberColumn(min_value=0, step=1),
-            "CantidadMochila": st.column_config.NumberColumn(min_value=0, step=1),
-        },
-        key="editor_dulces"
-    )
-
-    # 4. Botón Guardar
-    if st.button("💾 Guardar Cambios"):
-        try:
-            # Aquí también usamos 0 para guardar en la primera hoja
-            conn.update(spreadsheet=url_excel, worksheet=0, data=df_editado)
-            st.success("¡Guardado exitoso! ☁️")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error al guardar: {e}")
+    # (OPCIONAL) FORMULARIO SIMPLE PARA AGREGAR DATO Y PROBAR ESCRITURA
+    st.divider()
+    st.subheader("Agregar Nuevo Dulce")
+    with st.form("nuevo_dulce"):
+        nombre = st.text_input("Nombre del Dulce")
+        cantidad = st.number_input("Cantidad", min_value=1, step=1)
+        precio = st.number_input("Precio", min_value=0)
+        enviado = st.form_submit_button("Guardar")
+        
+        if enviado and nombre:
+            # Agregar fila al Excel
+            worksheet.append_row([nombre, cantidad, precio])
+            st.success(f"Dulce '{nombre}' agregado correctamente.")
+            st.rerun() # Recargar para ver cambios
 
 except Exception as e:
-    st.error("Ocurrió un error. Detalles abajo:")
-    st.code(e) # Esto nos mostrará el error limpio si pasa algo más
+    st.error(f"Ocurrió un error: {e}")
+    st.stop()

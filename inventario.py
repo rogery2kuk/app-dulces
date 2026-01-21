@@ -2,24 +2,25 @@ import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 
-# 1. Configuración de página
+# Configuración
 st.set_page_config(page_title="Dulces App", page_icon="🍬")
 st.title("🍬 Gestión de Dulces (En la Nube)")
 
-# 2. Enlace DIRECTO (Sin espacios)
+# --- TU ENLACE (Ya lo puse yo, no lo toques) ---
 url_excel = "https://docs.google.com/spreadsheets/d/1wVjGQBeoDL4biUwbjqRhkVW6H4zkbQu_0qDokP5s-uY/edit?usp=sharing"
+# -----------------------------------------------
 
-# 3. Conexión y Carga
+# Conexión
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # Leer datos
-    df = conn.read(spreadsheet=url_excel, worksheet="Hoja 1", usecols=[0, 1, 2, 3], ttl=5)
+    # Cargar datos (Sin cache para que actualice rápido)
+    df = conn.read(spreadsheet=url_excel, worksheet="Hoja 1", usecols=[0, 1, 2, 3], ttl=0)
     df = df.dropna(how="all")
 
-    st.success("✅ ¡Conectado correctamente!")
+    st.success("✅ ¡Conexión Exitosa!")
 
-    # 4. Tabla Editable
+    # Tabla editable
     df_editado = st.data_editor(
         df,
         num_rows="dynamic",
@@ -31,13 +32,14 @@ try:
         key="editor_dulces"
     )
 
-    # 5. Botón Guardar
+    # Botón guardar
     if st.button("💾 Guardar Cambios"):
-        conn.update(spreadsheet=url_excel, worksheet="Hoja 1", data=df_editado)
-        st.success("¡Cambios guardados en la nube!")
-        st.rerun()
+        try:
+            conn.update(spreadsheet=url_excel, worksheet="Hoja 1", data=df_editado)
+            st.success("¡Guardado en Google Sheets! ☁️")
+        except Exception as e:
+            st.error(f"Error al guardar: {e}")
 
 except Exception as e:
-    st.error("Error de conexión. Verifica que el enlace no tenga espacios.")
+    st.error("Hubo un error de conexión.")
     st.write(e)
-

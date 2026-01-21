@@ -2,44 +2,26 @@ import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 
-# 1. Configuración de la página
+# 1. Configuración básica
 st.set_page_config(page_title="Dulces App", page_icon="🍬")
 st.title("🍬 Gestión de Dulces (En la Nube)")
 
-# --- URL DIRECTA DEL EXCEL (LA SOLUCIÓN BLINDADA) ---
-URL_EXCEL = "https://docs.google.com/spreadsheets/d/1wVjGQBeoDL4biUwbjqRhkVW6H4zkbQu_0qDokP5s-uY/edit?usp=sharing"
-# ----------------------------------------------------
+# 2. El enlace EXACTO (Sin espacios)
+# Nota: He limpiado cualquier espacio oculto en esta linea
+url_excel = "https://docs.google.com/spreadsheets/d/1wVjGQBeoDL4biUwbjqRhkVW6H4zkbQu_0qDokP5s-uY/edit?usp=sharing"
 
-# 2. Conexión
-conn = st.connection("gsheets", type=GSheetsConnection)
+# 3. Conexión
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Función para cargar datos
-def cargar_datos():
-    try:
-        # Forzamos a leer desde la URL directa
-        df = conn.read(spreadsheet=URL_EXCEL, worksheet="Hoja 1", usecols=[0, 1, 2, 3], ttl=5)
-        df = df.dropna(how="all")
-        return df
-    except Exception as e:
-        # Si falla, mostramos el error real para saber qué pasa
-        st.error(f"Error detallado: {e}")
-        return None
+    # Cargar datos
+    df = conn.read(spreadsheet=url_excel, worksheet="Hoja 1", usecols=[0, 1, 2, 3], ttl=5)
+    df = df.dropna(how="all")
 
-# Función para guardar datos
-def guardar_datos(df):
-    try:
-        conn.update(spreadsheet=URL_EXCEL, worksheet="Hoja 1", data=df)
-        st.success("¡Guardado en la nube! ☁️")
-    except Exception as e:
-        st.error(f"No se pudo guardar: {e}")
+    # 4. Mostrar la app
+    st.success("✅ ¡Conectado al Excel!")
 
-# 3. Lógica principal
-df = cargar_datos()
-
-if df is not None:
-    st.success("✅ ¡Conexión Exitosa!")
-    
-    # Mostrar la tabla editable
+    # Tabla editable
     df_editado = st.data_editor(
         df,
         num_rows="dynamic",
@@ -51,11 +33,12 @@ if df is not None:
         key="editor_dulces"
     )
 
-    # Botón de guardar
+    # Botón guardar
     if st.button("💾 Guardar Cambios"):
-        guardar_datos(df_editado)
+        conn.update(spreadsheet=url_excel, worksheet="Hoja 1", data=df_editado)
+        st.success("¡Guardado correctamente!")
         st.rerun()
-else:
-    st.warning("⚠️ No se pudo conectar. Verifica que borraste la caja de 'Secrets'.")
 
-
+except Exception as e:
+    st.error("Hubo un error con el enlace o la conexión.")
+    st.write(f"Detalle del error: {e}")

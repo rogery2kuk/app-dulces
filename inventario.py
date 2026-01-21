@@ -6,14 +6,16 @@ import pandas as pd
 st.set_page_config(page_title="Dulces App", page_icon="🍬")
 st.title("🍬 Gestión de Dulces (En la Nube)")
 
-# --- CONEXIÓN A GOOGLE SHEETS ---
+# --- CONEXIÓN A GOOGLE SHEETS (MODO SEGURO) ---
+# Ponemos el enlace aquí directo para evitar errores de Secrets
+url_fix = "https://docs.google.com/spreadsheets/d/1wVjGQBeoDL4biUwbjqRhkVW6H4zkbQu_0qDokP5s-uY/edit?usp=sharing"
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # Función para cargar datos
 def cargar_datos():
     try:
-        # Leemos la hoja 1
-        df = conn.read(worksheet="Hoja 1", usecols=[0, 1, 2, 3], ttl=5)
+        # Usamos url_fix para obligar a leer este archivo específico
+        df = conn.read(spreadsheet=url_fix, worksheet="Hoja 1", usecols=[0, 1, 2, 3], ttl=5)
         df = df.dropna(how="all")
         return df
     except Exception as e:
@@ -21,7 +23,18 @@ def cargar_datos():
 
 # Función para guardar datos
 def guardar_datos(df):
-    conn.update(worksheet="Hoja 1", data=df)
+    try:
+        # Usamos url_fix para obligar a guardar en este archivo específico
+        conn.update(spreadsheet=url_fix, worksheet="Hoja 1", data=df)
+    except:
+        st.error("Error al guardar")
+# Función para guardar datos
+def guardar_datos(df):
+    try:
+        # Usamos url_fix para obligar a guardar en este archivo específico
+        conn.update(spreadsheet=url_fix, worksheet="Hoja 1", data=df)
+    except:
+        st.error("Error al guardar")
     st.cache_data.clear()
 
 # --- CARGAMOS LOS DATOS ---
@@ -103,4 +116,5 @@ with tab3:
                 guardar_datos(df)
                 st.success("Guardado.")
                 st.rerun()
+
 
